@@ -179,12 +179,12 @@ class Layups
 {
 	private:
 		int number = 0;
-		int total_plyes_num = 0;
+		int total_plies_num = 0;
 		int ply_characteristics_number = 5; //matID
 		std::unordered_map<int, const double* > Layups_map;
 		std::unordered_map<int, int* > Elements_map;
 		Container<int> Elements_container;
-		Container<double> Plyes;
+		Container<double> plies;
 		femap::zReturnCode rc;
 		/*
 			Структура контейнера Layups_map
@@ -192,9 +192,9 @@ class Layups
 				Layups_map[i]
 					|	
 					v
-			[Layup_1 numOfPlyes, Layup_1 Ply_1 MatID, Layup_1 Ply_1 Thikness, Layup_1 Ply_1 Angle, Layup_1 Ply_1 GlobalPLy, Layup_1 Ply_1 FailureTheory,
+			[Layup_1 numOfplies, Layup_1 Ply_1 MatID, Layup_1 Ply_1 Thikness, Layup_1 Ply_1 Angle, Layup_1 Ply_1 GlobalPLy, Layup_1 Ply_1 FailureTheory,
 			 Layup_1 Ply_2 MatlID, Layup_1 Ply_2 Thikness, Layup_1 Ply_2 Angle, Layup_1 Ply_2 GlobalPLy, Layup_1 Ply_2 FailureTheory, ...
-			 Layup_2 numOfPlyes, Layup_2 Ply_1 MatID, Layup_2 Ply_1 Thikness, Layup_2 Ply_1 Angle, Layup_2 Ply_1 GlobalPLy, Layup_2 Ply_1 FailureTheory, ...
+			 Layup_2 numOfplies, Layup_2 Ply_1 MatID, Layup_2 Ply_1 Thikness, Layup_2 Ply_1 Angle, Layup_2 Ply_1 GlobalPLy, Layup_2 Ply_1 FailureTheory, ...
 			 ...]
 		*/
 
@@ -227,14 +227,14 @@ class Layups
 			int elNumOnLayup = 0;
 			CComVariant Elements;
 
-			int sum_of_all_plyes = 0;
+			int sum_of_all_plies = 0;
 
 			Layup_Set->Reset();
 			while (Layup_Set->Next() != femap::zReturnCode::FE_FAIL)
 			{
 				Layup_obj->Get(Layup_Set->CurrentID);
-				sum_of_all_plyes += Layup_obj->NumberOfPlys;
-				if (Layup_obj->NumberOfPlys > total_plyes_num)	total_plyes_num = Layup_obj->NumberOfPlys;
+				sum_of_all_plies += Layup_obj->NumberOfPlys;
+				if (Layup_obj->NumberOfPlys > total_plies_num)	total_plies_num = Layup_obj->NumberOfPlys;
 				
 				//Заполняем контейнер [кол-во эл-ов layup-а, элементы...] 
 				rc = Elements_Set->clear();
@@ -249,26 +249,26 @@ class Layups
 				Elements.Clear();
 			}
 
-			Plyes.Set(sum_of_all_plyes * ply_characteristics_number + 1 * number);
+			plies.Set(sum_of_all_plies * ply_characteristics_number + 1 * number);
 
 			Layup_Set->Reset();
 			while (Layup_Set->Next() != femap::zReturnCode::FE_FAIL)
 			{
 					Layup_obj->Get(Layup_Set->CurrentID);
-					Layups_map.emplace(Layup_Set->CurrentID, Plyes.back());
+					Layups_map.emplace(Layup_Set->CurrentID, plies.back());
 
 					int numplys = 0;
 					CComVariant MatID, Thikness, Angle, Globply, FailureTh;
 					rc = Layup_obj->GetAllPly2(&numplys, &MatID, &Thikness, &Angle, &Globply, &FailureTh);
 
-					Plyes.push_back(numplys);
+					plies.push_back(numplys);
 					for (int i = 0; i < numplys; i++)
 					{
-						Plyes.push_back(((int*)MatID.parray->pvData)[i]);
-						Plyes.push_back(((double*)Thikness.parray->pvData)[i]);
-						Plyes.push_back(((double*)Angle.parray->pvData)[i]);
-						Plyes.push_back(((int*)Globply.parray->pvData)[i]);
-						Plyes.push_back(((int*)FailureTh.parray->pvData)[i]);
+						plies.push_back(((int*)MatID.parray->pvData)[i]);
+						plies.push_back(((double*)Thikness.parray->pvData)[i]);
+						plies.push_back(((double*)Angle.parray->pvData)[i]);
+						plies.push_back(((int*)Globply.parray->pvData)[i]);
+						plies.push_back(((int*)FailureTh.parray->pvData)[i]);
 
 					}
 
@@ -303,9 +303,9 @@ class Layups
 			return number;
 		}
 
-		int Get_TotalNumberOfPlyes()
+		int Get_TotalNumberOfplies()
 		{
-			return total_plyes_num;
+			return total_plies_num;
 		}
 
 		int Get_elemNumberOnLayup(int layupID)
@@ -313,7 +313,7 @@ class Layups
 			return *Elements_map[layupID];
 		}
 
-		int Get_NumberOfPlyes(int layupID)
+		int Get_NumberOfplies(int layupID)
 		{
 			return *Layups_map[layupID];
 		}
@@ -347,33 +347,33 @@ class Layups
 		{
 			for (std::unordered_map<int, const double * >::const_iterator it = Layups_map.cbegin(); it != Layups_map.cend(); ++it)
 			{
-				std::cout << "Layup ID \n" << it->first << " number of plyes " << this->Get_NumberOfPlyes(it->first) << std::endl;
+				std::cout << "Layup ID \n" << it->first << " number of plies " << this->Get_NumberOfplies(it->first) << std::endl;
 				std::cout << "Materials IDs \n";
-				for (int i = 0; i < this->Get_NumberOfPlyes(it->first); i++)
+				for (int i = 0; i < this->Get_NumberOfplies(it->first); i++)
 				{
 					std::cout << this->Get_MaterialID(it->first, i) << std::endl;
 				}
 
 				std::cout << "Thikness \n";
-				for (int i = 0; i < this->Get_NumberOfPlyes(it->first); i++)
+				for (int i = 0; i < this->Get_NumberOfplies(it->first); i++)
 				{
 					std::cout << this->Get_Thikness(it->first, i) << std::endl;
 				}
 
 				std::cout << "Angles \n";
-				for (int i = 0; i < this->Get_NumberOfPlyes(it->first); i++)
+				for (int i = 0; i < this->Get_NumberOfplies(it->first); i++)
 				{
 					std::cout << this->Get_Angle(it->first, i) << std::endl;
 				}
 
 				std::cout << "Globalplynum \n";
-				for (int i = 0; i < this->Get_NumberOfPlyes(it->first); i++)
+				for (int i = 0; i < this->Get_NumberOfplies(it->first); i++)
 				{
 					std::cout << this->Get_Globalplynum(it->first, i) << std::endl;
 				}		
 
 				std::cout << "FailiureTheory \n";
-						for (int i = 0; i < this->Get_NumberOfPlyes(it->first); i++)
+						for (int i = 0; i < this->Get_NumberOfplies(it->first); i++)
 				{
 					std::cout << this->Get_FailureTheory(it->first, i) << std::endl;
 				}	
@@ -529,7 +529,7 @@ class Results
 			int total_columns_added = 0;
 			CComVariant ColAddedInds;
 
-			for (int current_ply = 1; current_ply < Layups.Get_TotalNumberOfPlyes() + 1; current_ply++)
+			for (int current_ply = 1; current_ply < Layups.Get_TotalNumberOfplies() + 1; current_ply++)
 			{
 				rc = RBO_1->AddColumnV2(OutputID, 1000020 + 500 * (current_ply - 1), FALSE, &columns_added, &ColAddedInds);
 				ColAddedInds.Clear();
@@ -560,17 +560,17 @@ class Results
 			int matlID = 0;
 
 			int lauyps_num = Layups.Get_number();
-			int plyes_num = 0;
+			int plies_num = 0;
 			int elem_num = 0;
 
 			double resSigX = 0; double resSigY = 0; double resTau = 0;
 
 			for (std::unordered_map<int, const double* >::const_iterator Layups_iterator = Layups.Get_Layups_map_cbegin(); Layups_iterator != Layups.Get_Layups_map_cend(); ++Layups_iterator)
 			{
-				plyes_num = Layups.Get_NumberOfPlyes(Layups_iterator->first);
+				plies_num = Layups.Get_NumberOfplies(Layups_iterator->first);
 				elem_num = Layups.Get_elemNumberOnLayup(Layups_iterator->first);
 
-				for (int current_ply = 1; current_ply < plyes_num+1; current_ply++)
+				for (int current_ply = 1; current_ply < plies_num+1; current_ply++)
 				{
 					int* elem = Layups.Get_FirstElemOnLayup(Layups_iterator->first);
 					for (int i = 0; i < elem_num; i++)
@@ -614,7 +614,7 @@ void Calculate_Hoffman(femap::ImodelPtr& pModel, Elements& Elements, Properties&
 	int matlID = 0;
 
 	int lauyps_num = Layups.Get_number();
-	int plyes_num = 0;
+	int plies_num = 0;
 	int elem_num = 0;
 
 	double matSigXT = 0; double matSigYT = 0; double matSigXC = 0; double matSigYC = 0; double matTau = 0;
@@ -629,10 +629,10 @@ void Calculate_Hoffman(femap::ImodelPtr& pModel, Elements& Elements, Properties&
 
 	for (std::unordered_map<int, const double* >::const_iterator Layups_iterator = Layups.Get_Layups_map_cbegin(); Layups_iterator != Layups.Get_Layups_map_cend(); ++Layups_iterator)
 	{
-		plyes_num = Layups.Get_NumberOfPlyes(Layups_iterator->first);
+		plies_num = Layups.Get_NumberOfplies(Layups_iterator->first);
 		current_layupID = Layups_iterator->first;
 
-		for (int current_ply = 1; current_ply < plyes_num + 1; current_ply++)
+		for (int current_ply = 1; current_ply < plies_num + 1; current_ply++)
 			{
 			Title_str = "Hoffman Fail Ind Layup ";
 			Title_str.append(std::to_string(current_layupID));
@@ -646,10 +646,10 @@ void Calculate_Hoffman(femap::ImodelPtr& pModel, Elements& Elements, Properties&
 
 	for (std::unordered_map<int, const double* >::const_iterator Layups_iterator = Layups.Get_Layups_map_cbegin(); Layups_iterator != Layups.Get_Layups_map_cend(); ++Layups_iterator)
 			{
-				plyes_num = Layups.Get_NumberOfPlyes(Layups_iterator->first);
+				plies_num = Layups.Get_NumberOfplies(Layups_iterator->first);
 				elem_num = Layups.Get_elemNumberOnLayup(Layups_iterator->first);
 
-				for (int current_ply = 1; current_ply < plyes_num + 1; current_ply++)
+				for (int current_ply = 1; current_ply < plies_num + 1; current_ply++)
 				{
 					matlID = Layups.Get_MaterialID(Layups_iterator->first, current_ply);
 					Materials.Get_Characteristics(matlID, matSigXT, matSigXC, matSigYT, matSigYC, matTau);
@@ -722,7 +722,7 @@ void Calculate_Hashin(femap::ImodelPtr& pModel, Elements& Elements, Properties& 
 	int matlID = 0;
 
 	int lauyps_num = Layups.Get_number();
-	int plyes_num = 0;
+	int plies_num = 0;
 	int elem_num = 0;
 
 	double matSigXT = 0; double matSigYT = 0; double matSigXC = 0; double matSigYC = 0; double matTau = 0;
@@ -737,10 +737,10 @@ void Calculate_Hashin(femap::ImodelPtr& pModel, Elements& Elements, Properties& 
 
 	for (std::unordered_map<int, const double* >::const_iterator Layups_iterator = Layups.Get_Layups_map_cbegin(); Layups_iterator != Layups.Get_Layups_map_cend(); ++Layups_iterator)
 	{
-		plyes_num = Layups.Get_NumberOfPlyes(Layups_iterator->first);
+		plies_num = Layups.Get_NumberOfplies(Layups_iterator->first);
 		current_layupID = Layups_iterator->first;
 
-		for (int current_ply = 1; current_ply < plyes_num + 1; current_ply++)
+		for (int current_ply = 1; current_ply < plies_num + 1; current_ply++)
 			{
 			Title_str = "Hasin-Rothem Fail Ind Layup ";
 			Title_str.append(std::to_string(current_layupID));
@@ -754,16 +754,17 @@ void Calculate_Hashin(femap::ImodelPtr& pModel, Elements& Elements, Properties& 
 
 	for (std::unordered_map<int, const double* >::const_iterator Layups_iterator = Layups.Get_Layups_map_cbegin(); Layups_iterator != Layups.Get_Layups_map_cend(); ++Layups_iterator)
 			{
-				plyes_num = Layups.Get_NumberOfPlyes(Layups_iterator->first);
+				plies_num = Layups.Get_NumberOfplies(Layups_iterator->first);
 				elem_num = Layups.Get_elemNumberOnLayup(Layups_iterator->first);
 
-				for (int current_ply = 1; current_ply < plyes_num + 1; current_ply++)
+				for (int current_ply = 1; current_ply < plies_num + 1; current_ply++)
 				{
 					matlID = Layups.Get_MaterialID(Layups_iterator->first, current_ply);
 					Materials.Get_Characteristics(matlID, matSigXT, matSigXC, matSigYT, matSigYC, matTau);
 
 					Results_container.Set(Layups.Get_elemNumberOnLayup(Layups_iterator->first));
 
+					//Разрушение волокна
 					int* elem = Layups.Get_FirstElemOnLayup(Layups_iterator->first);
 					for (int i = 0; i < elem_num; i++)
 					{
@@ -776,6 +777,7 @@ void Calculate_Hashin(femap::ImodelPtr& pModel, Elements& Elements, Properties& 
 
 							FibFailInd = (resSigX  / matSigXC) * (resSigX  / matSigXC);
 
+						//Разрушение матрицы
 						if (resSigY >= 0)
 
 							MatrxFailInd = (resSigY / matSigYT)*(resSigY / matSigYT) + (resTau / matTau) * (resTau / matTau);
@@ -837,7 +839,7 @@ void Calculate_Chang(femap::ImodelPtr& pModel, Elements& Elements, Properties& P
 	int matlID = 0;
 
 	int lauyps_num = Layups.Get_number();
-	int plyes_num = 0;
+	int plies_num = 0;
 	int elem_num = 0;
 
 	double matSigXT = 0; double matSigYT = 0; double matSigXC = 0; double matSigYC = 0; double matTau = 0;
@@ -852,10 +854,10 @@ void Calculate_Chang(femap::ImodelPtr& pModel, Elements& Elements, Properties& P
 
 	for (std::unordered_map<int, const double* >::const_iterator Layups_iterator = Layups.Get_Layups_map_cbegin(); Layups_iterator != Layups.Get_Layups_map_cend(); ++Layups_iterator)
 	{
-		plyes_num = Layups.Get_NumberOfPlyes(Layups_iterator->first);
+		plies_num = Layups.Get_NumberOfplies(Layups_iterator->first);
 		current_layupID = Layups_iterator->first;
 
-		for (int current_ply = 1; current_ply < plyes_num + 1; current_ply++)
+		for (int current_ply = 1; current_ply < plies_num + 1; current_ply++)
 			{
 			Title_str = "Chang-Chang Fail Ind Layup ";
 			Title_str.append(std::to_string(current_layupID));
@@ -869,10 +871,10 @@ void Calculate_Chang(femap::ImodelPtr& pModel, Elements& Elements, Properties& P
 
 	for (std::unordered_map<int, const double* >::const_iterator Layups_iterator = Layups.Get_Layups_map_cbegin(); Layups_iterator != Layups.Get_Layups_map_cend(); ++Layups_iterator)
 			{
-				plyes_num = Layups.Get_NumberOfPlyes(Layups_iterator->first);
+				plies_num = Layups.Get_NumberOfplies(Layups_iterator->first);
 				elem_num = Layups.Get_elemNumberOnLayup(Layups_iterator->first);
 
-				for (int current_ply = 1; current_ply < plyes_num + 1; current_ply++)
+				for (int current_ply = 1; current_ply < plies_num + 1; current_ply++)
 				{
 					matlID = Layups.Get_MaterialID(Layups_iterator->first, current_ply);
 					Materials.Get_Characteristics(matlID, matSigXT, matSigXC, matSigYT, matSigYC, matTau);
@@ -884,6 +886,7 @@ void Calculate_Chang(femap::ImodelPtr& pModel, Elements& Elements, Properties& P
 					{
 						Results_obj.Get_Values(elem[i], current_ply, resSigX, resSigY, resTau);
 
+					//Разрушение волокна
 						if (resSigX >= 0)
 
 							FibFailInd = (resSigX / matSigXT)*(resSigX / matSigXT) + 0.1 * (resTau / matTau);
@@ -891,6 +894,7 @@ void Calculate_Chang(femap::ImodelPtr& pModel, Elements& Elements, Properties& P
 
 							FibFailInd = (resSigX  / matSigXC) * (resSigX  / matSigXC);
 
+					//Разрушение матрицы
 						if (resSigY >= 0)
 
 							MatrxFailInd = (resSigY) / (matSigYT * matSigYC) + resSigY*(matSigYC - matSigYT) / (matSigYT * matSigYC) + (resTau / matTau)*(resTau / matTau);
@@ -984,9 +988,12 @@ int main()
 	Results Result;
 	Result.Load(pModel, Layups_obj);
 	//Result.Out(Layups_obj);
+
+	//Расчёт критериев разрушения
 	Calculate_Hoffman(pModel, Elements_obj, Prop, Layups_obj, Matl);
-	Calculate_Hashin(pModel, Elements_obj, Prop, Layups_obj, Matl);
-	Calculate_Chang(pModel, Elements_obj, Prop, Layups_obj, Matl);
+	// Calculate_Hashin(pModel, Elements_obj, Prop, Layups_obj, Matl);
+	// Calculate_Chang(pModel, Elements_obj, Prop, Layups_obj, Matl);
+
 	clock_t end = clock();
 	std::cout << static_cast<double>((end - start))/ CLOCKS_PER_SEC << std::endl;
 

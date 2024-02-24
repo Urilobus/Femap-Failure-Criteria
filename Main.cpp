@@ -1,6 +1,7 @@
 #include <atlsafe.h>
 #include <oleauto.h>
 #include <iostream>
+#include <fstream>
 #include <vector>
 #import "femap.tlb" rename("GetProp", "GP")
 #include <time.h>
@@ -187,9 +188,12 @@ class Layups
 		Container<double> plies;
 		femap::zReturnCode rc;
 		/*
-			Структура контейнера Layups_map
+			Структура контейнера plies
 
 				Layups_map[i]
+					|	
+					v
+				   plies
 					|	
 					v
 			[Layup_1 numOfplies, Layup_1 Ply_1 MatID, Layup_1 Ply_1 Thikness, Layup_1 Ply_1 Angle, Layup_1 Ply_1 GlobalPLy, Layup_1 Ply_1 FailureTheory,
@@ -199,10 +203,13 @@ class Layups
 		*/
 
 		/*
-			Структура контейнера Elements_map
+			Структура контейнера Elements_container
 
 				Elements_map
-					-
+					|	
+					v
+				Elements_container
+					|	
 					v
 			[Elem_number on Layup_1, Elem_1 (first) on Layup_1 ... Elem_n (last) on Layup_1,
 				Elem_number on Layup_2, Elem_1 (first) on Layup_1 ... Elem_n (last) on Layup_1,
@@ -704,19 +711,26 @@ void Calculate_Hashin(femap::ImodelPtr& pModel, Elements& Elements, Properties& 
 	CComVariant CComcolIndexes;
 	int colInd = 0;
 	_bstr_t Title;
+	_bstr_t Title_2;
 	
+	CComQIPtr<femap::IResults> RBO_3;
+	RBO_3 = pModel->feResults;
 
 
 	Container<double> Results_container;
+	Container<double> Results_container_2;
 
 	CComSafeArray<double> CComSAResults;
 	CComSafeArray<int> CComSAElements;
+	CComSafeArray<double> CComSAReasons;
 
 	double	Hoffman_FC = 0;
 
 	double FibFailInd = 0;
 	double MatrxFailInd = 0;
-
+	double MaxFibFailInd = 0;
+	double MaxMatrxFailInd = 0;
+	
 	int propID = 0;
 	int layupID = 0;
 	int matlID = 0;
@@ -732,6 +746,7 @@ void Calculate_Hashin(femap::ImodelPtr& pModel, Elements& Elements, Properties& 
 	Results_obj.Load(pModel, Layups);
 
 	std::string Title_str;
+	std::string Title_str2;
 	int current_layupID = 0;
 	
 
@@ -748,9 +763,18 @@ void Calculate_Hashin(femap::ImodelPtr& pModel, Elements& Elements, Properties& 
 			Title_str.append(std::to_string(current_ply));
 			Title = _com_util::ConvertStringToBSTR(Title_str.c_str());
 			rc = RBO_2->AddScalarAtElemColumnV2(OutputID, 2005000 + current_ply, Title, femap::zOutputType::FOT_ANY, FALSE, &colInd);
+			Title_str2 = "Hasin-Rothem Fail Reason Layup ";
+			Title_str2.append(std::to_string(current_layupID));
+			Title_str2.append(" ply ");
+			Title_str2.append(std::to_string(current_ply));
+			Title_2 = _com_util::ConvertStringToBSTR(Title_str2.c_str());
+			rc = RBO_3->AddScalarAtElemColumnV2(OutputID, 3005000 + current_ply, Title_2, femap::zOutputType::FOT_ANY, FALSE, &colInd);
 			Title.Detach();
+			Title_2.Detach();
 			}
 	}
+
+	
 
 	for (std::unordered_map<int, const double* >::const_iterator Layups_iterator = Layups.Get_Layups_map_cbegin(); Layups_iterator != Layups.Get_Layups_map_cend(); ++Layups_iterator)
 			{
@@ -763,6 +787,8 @@ void Calculate_Hashin(femap::ImodelPtr& pModel, Elements& Elements, Properties& 
 					Materials.Get_Characteristics(matlID, matSigXT, matSigXC, matSigYT, matSigYC, matTau);
 
 					Results_container.Set(Layups.Get_elemNumberOnLayup(Layups_iterator->first));
+					Results_container_2.Set(Layups.Get_elemNumberOnLayup(Layups_iterator->first));
+					
 
 					//Разрушение волокна
 					int* elem = Layups.Get_FirstElemOnLayup(Layups_iterator->first);
@@ -777,6 +803,8 @@ void Calculate_Hashin(femap::ImodelPtr& pModel, Elements& Elements, Properties& 
 
 							FibFailInd = (resSigX  / matSigXC) * (resSigX  / matSigXC);
 
+						MaxFibFailInd = max(MaxFibFailInd, FibFailInd);
+
 						//Разрушение матрицы
 						if (resSigY >= 0)
 
@@ -785,29 +813,43 @@ void Calculate_Hashin(femap::ImodelPtr& pModel, Elements& Elements, Properties& 
 
 							FibFailInd = (resSigY / matSigYC)*(resSigY / matSigYC) + (resTau / matTau) * (resTau / matTau);
 
+						MaxMatrxFailInd = max(MaxMatrxFailInd, MatrxFailInd);
+
 						Results_container.push_back(max(FibFailInd, MatrxFailInd));
+
+						if (max(MaxFibFailInd, MaxMatrxFailInd) == MaxFibFailInd)	Results_container_2.push_back(1);
+							else Results_container_2.push_back(0);
+
 
 					}
 
 					CComSAElements.Add(Layups.Get_elemNumberOnLayup(Layups_iterator->first), Layups.Get_FirstElemOnLayup(Layups_iterator->first), TRUE);
 					CComSAResults.Add(Results_container.get_size(), Results_container.front(), TRUE);  
+					CComSAReasons.Add(Results_container_2.get_size(), Results_container_2.front(), TRUE); 
 
 					CComVariant A = CComSAElements;
 					CComVariant B = CComSAResults;
+					CComVariant C = CComSAReasons;
 
 					rc = RBO_2->SetScalarAtElemColumnV2(current_ply - 1, elem_num, &A, &B);
+					rc = RBO_3->SetScalarAtElemColumnV2(current_ply - 1, elem_num, &A, &C);
 
+					CComSAReasons.Destroy();
 					CComSAResults.Destroy();
 					CComSAElements.Destroy();
 					A.Clear();
 					B.Clear();
+					C.Clear();
 
 				};
 			}
 
 	rc = RBO_2->Save();
+	rc = RBO_3->Save();
 }
 
+
+/*
 void Calculate_Chang(femap::ImodelPtr& pModel, Elements& Elements, Properties& Properties, Layups& Layups, Materials& Materials)
 {
 	femap::zReturnCode rc;
@@ -821,18 +863,22 @@ void Calculate_Chang(femap::ImodelPtr& pModel, Elements& Elements, Properties& P
 	CComVariant CComcolIndexes;
 	int colInd = 0;
 	_bstr_t Title;
-	
+	_bstr_t Title_2;
 
+	CComQIPtr<femap::IResults> RBO_3;
+	RBO_3 = pModel->feResults;
 
 	Container<double> Results_container;
+	Container<double> Results_container_2;
 
 	CComSafeArray<double> CComSAResults;
 	CComSafeArray<int> CComSAElements;
-
-	double	Hoffman_FC = 0;
+	CComSafeArray<double> CComSAReasons;
 
 	double FibFailInd = 0;
 	double MatrxFailInd = 0;
+	double MaxFibFailInd = 0;
+	double MaxMatrxFailInd = 0;
 
 	int propID = 0;
 	int layupID = 0;
@@ -849,6 +895,7 @@ void Calculate_Chang(femap::ImodelPtr& pModel, Elements& Elements, Properties& P
 	Results_obj.Load(pModel, Layups);
 
 	std::string Title_str;
+	std::string Title_str2;
 	int current_layupID = 0;
 	
 
@@ -865,7 +912,14 @@ void Calculate_Chang(femap::ImodelPtr& pModel, Elements& Elements, Properties& P
 			Title_str.append(std::to_string(current_ply));
 			Title = _com_util::ConvertStringToBSTR(Title_str.c_str());
 			rc = RBO_2->AddScalarAtElemColumnV2(OutputID, 2010000 + current_ply, Title, femap::zOutputType::FOT_ANY, FALSE, &colInd);
+			Title_str2 = "Chang-Chang Fail Reason Layup ";
+			Title_str2.append(std::to_string(current_layupID));
+			Title_str2.append(" ply ");
+			Title_str2.append(std::to_string(current_ply));
+			Title_2 = _com_util::ConvertStringToBSTR(Title_str2.c_str());
+			rc = RBO_2->AddScalarAtElemColumnV2(OutputID, 3010000 + current_ply, Title_2, femap::zOutputType::FOT_ANY, FALSE, &colInd);
 			Title.Detach();
+			Title_2.Detach();
 			}
 	}
 
@@ -880,6 +934,7 @@ void Calculate_Chang(femap::ImodelPtr& pModel, Elements& Elements, Properties& P
 					Materials.Get_Characteristics(matlID, matSigXT, matSigXC, matSigYT, matSigYC, matTau);
 
 					Results_container.Set(Layups.Get_elemNumberOnLayup(Layups_iterator->first));
+					Results_container_2.Set(Layups.Get_elemNumberOnLayup(Layups_iterator->first));
 
 					int* elem = Layups.Get_FirstElemOnLayup(Layups_iterator->first);
 					for (int i = 0; i < elem_num; i++)
@@ -894,41 +949,246 @@ void Calculate_Chang(femap::ImodelPtr& pModel, Elements& Elements, Properties& P
 
 							FibFailInd = (resSigX  / matSigXC) * (resSigX  / matSigXC);
 
+						MaxFibFailInd = max(MaxFibFailInd, FibFailInd);
+
 					//Разрушение матрицы
 						if (resSigY >= 0)
 
 							MatrxFailInd = (resSigY) / (matSigYT * matSigYC) + resSigY*(matSigYC - matSigYT) / (matSigYT * matSigYC) + (resTau / matTau)*(resTau / matTau);
 
+						MaxMatrxFailInd = max(MaxMatrxFailInd, MatrxFailInd);
+
 						Results_container.push_back(max(FibFailInd, MatrxFailInd));
+
+						if (max(MaxFibFailInd, MaxMatrxFailInd) == MaxFibFailInd)	Results_container_2.push_back(1);
+							else Results_container_2.push_back(0);
 
 					}
 
 					CComSAElements.Add(Layups.Get_elemNumberOnLayup(Layups_iterator->first), Layups.Get_FirstElemOnLayup(Layups_iterator->first), TRUE);
-					CComSAResults.Add(Results_container.get_size(), Results_container.front(), TRUE);  
+					CComSAResults.Add(Results_container.get_size(), Results_container.front(), TRUE); 
+					CComSAReasons.Add(Results_container_2.get_size(), Results_container_2.front(), TRUE);  
 
 					CComVariant A = CComSAElements;
 					CComVariant B = CComSAResults;
+					CComVariant C = CComSAReasons;
 
 					rc = RBO_2->SetScalarAtElemColumnV2(current_ply - 1, elem_num, &A, &B);
+					rc = RBO_3->SetScalarAtElemColumnV2(current_ply - 1, elem_num, &A, &C);
 
+					CComSAReasons.Destroy();
 					CComSAResults.Destroy();
 					CComSAElements.Destroy();
 					A.Clear();
 					B.Clear();
+					C.Clear();
 
 				};
 			}
 
 	rc = RBO_2->Save();
+	rc = RBO_3->Save();
+}*/
+
+void Calculate_Chang(femap::ImodelPtr& pModel, Elements& Elements, Properties& Properties, Layups& Layups, Materials& Materials)
+{
+	femap::zReturnCode rc;
+
+	CComQIPtr<femap::IOutputSet> OutputSetObj;
+	OutputSetObj = pModel->feOutputSet;
+	int OutputID = OutputSetObj->GetActive();
+
+	CComQIPtr<femap::IResults> RBO_2;
+	RBO_2 = pModel->feResults;
+	CComVariant CComcolIndexes;
+	int colInd = 0;
+	_bstr_t Title;
+	_bstr_t Title_2;
+	
+	CComQIPtr<femap::IResults> RBO_3;
+	RBO_3 = pModel->feResults;
+
+
+	Container<double> Results_container;
+	Container<double> Results_container_2;
+
+	CComSafeArray<double> CComSAResults;
+	CComSafeArray<int> CComSAElements;
+	CComSafeArray<double> CComSAReasons;
+
+	double	Hoffman_FC = 0;
+
+	double FibFailInd = 0;
+	double MatrxFailInd = 0;
+	double MaxFibFailInd = 0;
+	double MaxMatrxFailInd = 0;
+	
+	int propID = 0;
+	int layupID = 0;
+	int matlID = 0;
+
+	int lauyps_num = Layups.Get_number();
+	int plies_num = 0;
+	int elem_num = 0;
+
+	double matSigXT = 0; double matSigYT = 0; double matSigXC = 0; double matSigYC = 0; double matTau = 0;
+	double resSigX = 0; double resSigY = 0; double resTau = 0;
+
+	Results Results_obj;
+	Results_obj.Load(pModel, Layups);
+
+	std::string Title_str;
+	std::string Title_str2;
+	int current_layupID = 0;
+	
+
+	for (std::unordered_map<int, const double* >::const_iterator Layups_iterator = Layups.Get_Layups_map_cbegin(); Layups_iterator != Layups.Get_Layups_map_cend(); ++Layups_iterator)
+	{
+		plies_num = Layups.Get_NumberOfplies(Layups_iterator->first);
+		current_layupID = Layups_iterator->first;
+
+		for (int current_ply = 1; current_ply < plies_num + 1; current_ply++)
+			{
+			Title_str = "Chang-Chang Fail Ind Layup ";
+			Title_str.append(std::to_string(current_layupID));
+			Title_str.append(" ply ");
+			Title_str.append(std::to_string(current_ply));
+			Title = _com_util::ConvertStringToBSTR(Title_str.c_str());
+			rc = RBO_2->AddScalarAtElemColumnV2(OutputID, 2010000 + current_ply, Title, femap::zOutputType::FOT_ANY, FALSE, &colInd);
+			Title_str2 = "Chang-Chang Fail Reason Layup ";
+			Title_str2.append(std::to_string(current_layupID));
+			Title_str2.append(" ply ");
+			Title_str2.append(std::to_string(current_ply));
+			Title_2 = _com_util::ConvertStringToBSTR(Title_str2.c_str());
+			rc = RBO_3->AddScalarAtElemColumnV2(OutputID, 3010000 + current_ply, Title_2, femap::zOutputType::FOT_ANY, FALSE, &colInd);
+			Title.Detach();
+			Title_2.Detach();
+			}
+	}
+
+	
+
+	for (std::unordered_map<int, const double* >::const_iterator Layups_iterator = Layups.Get_Layups_map_cbegin(); Layups_iterator != Layups.Get_Layups_map_cend(); ++Layups_iterator)
+			{
+				plies_num = Layups.Get_NumberOfplies(Layups_iterator->first);
+				elem_num = Layups.Get_elemNumberOnLayup(Layups_iterator->first);
+
+				for (int current_ply = 1; current_ply < plies_num + 1; current_ply++)
+				{
+					matlID = Layups.Get_MaterialID(Layups_iterator->first, current_ply);
+					Materials.Get_Characteristics(matlID, matSigXT, matSigXC, matSigYT, matSigYC, matTau);
+
+					Results_container.Set(Layups.Get_elemNumberOnLayup(Layups_iterator->first));
+					Results_container_2.Set(Layups.Get_elemNumberOnLayup(Layups_iterator->first));
+					
+
+					//Разрушение волокна
+					int* elem = Layups.Get_FirstElemOnLayup(Layups_iterator->first);
+					for (int i = 0; i < elem_num; i++)
+					{
+						Results_obj.Get_Values(elem[i], current_ply, resSigX, resSigY, resTau);
+
+						//Разрушение волокна
+						if (resSigX >= 0)
+
+							FibFailInd = (resSigX / matSigXT)*(resSigX / matSigXT) + 0.1 * (resTau / matTau);
+						else
+
+							FibFailInd = (resSigX  / matSigXC) * (resSigX  / matSigXC);
+
+						MaxFibFailInd = max(MaxFibFailInd, FibFailInd);
+
+					//Разрушение матрицы
+						if (resSigY >= 0)
+
+							MatrxFailInd = (resSigY) / (matSigYT * matSigYC) + resSigY*(matSigYC - matSigYT) / (matSigYT * matSigYC) + (resTau / matTau)*(resTau / matTau);
+
+
+						MaxMatrxFailInd = max(MaxMatrxFailInd, MatrxFailInd);
+
+						Results_container.push_back(max(FibFailInd, MatrxFailInd));
+
+						if (max(MaxFibFailInd, MaxMatrxFailInd) == MaxFibFailInd)	Results_container_2.push_back(1);
+							else Results_container_2.push_back(0);
+
+
+					}
+
+					CComSAElements.Add(Layups.Get_elemNumberOnLayup(Layups_iterator->first), Layups.Get_FirstElemOnLayup(Layups_iterator->first), TRUE);
+					CComSAResults.Add(Results_container.get_size(), Results_container.front(), TRUE);  
+					CComSAReasons.Add(Results_container_2.get_size(), Results_container_2.front(), TRUE); 
+
+					CComVariant A = CComSAElements;
+					CComVariant B = CComSAResults;
+					CComVariant C = CComSAReasons;
+
+					rc = RBO_2->SetScalarAtElemColumnV2(current_ply - 1, elem_num, &A, &B);
+					rc = RBO_3->SetScalarAtElemColumnV2(current_ply - 1, elem_num, &A, &C);
+
+					CComSAReasons.Destroy();
+					CComSAResults.Destroy();
+					CComSAElements.Destroy();
+					A.Clear();
+					B.Clear();
+					C.Clear();
+
+				};
+			}
+
+	rc = RBO_2->Save();
+	rc = RBO_3->Save();
 }
 
-void AddColumns()
+void ChooseCriteria(femap::ImodelPtr &pModel, Elements &Elements_obj,Properties& Prop,Layups &Layups_obj,Materials &Matl)
 {
-	
+	int n = 0;
+
+	std::cout << "Write a number to calculate criterias (Example: 12 - Hoffman and Hashin-Rothem Criterias)\n";
+	std::cout << "1 - Hoffman Criteria\n";
+	std::cout << "2 - Hashin-Rothem Criteria\n";
+	std::cout << "3 - Chang-Chang Criteria\n";
+
+	scanf("%d", &n);
+
+	if (n == 1) Calculate_Hoffman(pModel, Elements_obj, Prop, Layups_obj, Matl);
+
+		else if (n == 2) Calculate_Hashin(pModel, Elements_obj, Prop, Layups_obj, Matl);
+		
+		else if (n == 3) Calculate_Chang(pModel, Elements_obj, Prop, Layups_obj, Matl);
+
+		else if ((n == 12) || (n == 21))
+			{
+				Calculate_Hoffman(pModel, Elements_obj, Prop, Layups_obj, Matl);
+				Calculate_Hashin(pModel, Elements_obj, Prop, Layups_obj, Matl);
+			}
+		
+		else if ((n == 13) || (n == 31)) 
+			{
+				Calculate_Hoffman(pModel, Elements_obj, Prop, Layups_obj, Matl);
+				Calculate_Chang(pModel, Elements_obj, Prop, Layups_obj, Matl);
+			}
+
+		else if ((n == 23) || (n == 32)) 
+			{
+				Calculate_Hashin(pModel, Elements_obj, Prop, Layups_obj, Matl);
+				Calculate_Chang(pModel, Elements_obj, Prop, Layups_obj, Matl);
+			}	
+
+		else if ((n == 123) || (n == 321) || (n == 213) || (n == 312)) 
+			{
+				Calculate_Hoffman(pModel, Elements_obj, Prop, Layups_obj, Matl);
+				Calculate_Hashin(pModel, Elements_obj, Prop, Layups_obj, Matl);
+				Calculate_Chang(pModel, Elements_obj, Prop, Layups_obj, Matl);
+			}
+
+			else std::cout << "Wrong format \n";
+
+
 }
 
 int main()
 {
+	// Подключение к Femap
     clock_t start = clock();
 	HRESULT hr;
 	hr = CoInitialize(NULL);
@@ -967,8 +1227,6 @@ int main()
 	Prop.Load(pModel, Prop_Set);
 	Prop.Out();
 
-	std::cout << Prop.Get_LayupID(3) << std::endl;
-
 	CComQIPtr<femap::ISet> Layup_Set;
 	Layup_Set = pModel->feSet;
 	Layup_Set->AddAll(femap::FT_LAYUP);
@@ -990,9 +1248,11 @@ int main()
 	//Result.Out(Layups_obj);
 
 	//Расчёт критериев разрушения
-	Calculate_Hoffman(pModel, Elements_obj, Prop, Layups_obj, Matl);
-	// Calculate_Hashin(pModel, Elements_obj, Prop, Layups_obj, Matl);
-	// Calculate_Chang(pModel, Elements_obj, Prop, Layups_obj, Matl);
+	//Calculate_Hoffman(pModel, Elements_obj, Prop, Layups_obj, Matl);
+	//Calculate_Hashin(pModel, Elements_obj, Prop, Layups_obj, Matl);
+	//Calculate_Chang(pModel, Elements_obj, Prop, Layups_obj, Matl);
+
+	ChooseCriteria(pModel, Elements_obj, Prop, Layups_obj, Matl);
 
 	clock_t end = clock();
 	std::cout << static_cast<double>((end - start))/ CLOCKS_PER_SEC << std::endl;
